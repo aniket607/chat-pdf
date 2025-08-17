@@ -21,7 +21,7 @@ export async function parseWithLlamaParse(pdfBuffer: Buffer): Promise<LlamaParse
   try {
     // Write buffer to temporary file
     await writeFile(tempFilePath, pdfBuffer);
-    
+    //create new reader instance
     const reader = new LlamaParseReader({ apiKey, resultType: "markdown" });
     const docs = await reader.loadData(tempFilePath);
     if (Array.isArray(docs) && docs.length > 0) {

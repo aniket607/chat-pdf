@@ -10,7 +10,6 @@ export type Chunk = {
 /**
  * Simple page-aware chunking.
  * - Joins page texts with page markers.
- * - Splits into ~700 token-like segments (approx by characters), with ~100 char overlap.
  * - Keeps track of page ranges per chunk.
  */
 export function chunkPagesToRag(
@@ -42,7 +41,7 @@ export function chunkPagesToRag(
       const start = Math.max(0, buffer.length - overlapChars);
       const overlap = buffer.slice(start);
       buffer = overlap + pageBlock;
-      rangeStart = Math.max(rangeStart, rangeEnd); // ensure monotonic
+      rangeStart = Math.max(rangeStart, rangeEnd);
       rangeEnd = pageNumber;
     } else {
       buffer += pageBlock;

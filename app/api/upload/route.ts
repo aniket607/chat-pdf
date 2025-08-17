@@ -34,8 +34,6 @@ export async function POST(req: Request) {
       return Response.json({ error: "SAVE_FAILED", message: msg }, { status: 500 });
     }
 
-    // Fire-and-forget ingestion; we do not block the response.
-    // In development this is fine; for production consider proper job queues.
     parseAndIndex(docId, blobUrl).catch((e) => {
       console.error("parseAndIndex error", e);
     });

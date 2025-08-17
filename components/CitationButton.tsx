@@ -6,9 +6,14 @@ interface CitationButtonProps {
   pageNumber: number;
   onClick: (pageNumber: number) => void;
   className?: string;
+  isRange?: boolean;
+  endPage?: number;
 }
 
-export function CitationButton({ pageNumber, onClick, className = "" }: CitationButtonProps) {
+export function CitationButton({ pageNumber, onClick, className = "", isRange = false, endPage }: CitationButtonProps) {
+  const displayText = isRange && endPage ? `p.${pageNumber}-${endPage}` : `p.${pageNumber}`;
+  const tooltipText = isRange && endPage ? `Go to page ${pageNumber} (range: ${pageNumber}-${endPage})` : `Go to page ${pageNumber}`;
+  
   return (
     <button
       onClick={() => onClick(pageNumber)}
@@ -19,10 +24,10 @@ export function CitationButton({ pageNumber, onClick, className = "" }: Citation
         transition-colors duration-150 cursor-pointer
         ${className}
       `}
-      title={`Go to page ${pageNumber}`}
+      title={tooltipText}
     >
       <FileText className="w-3 h-3" />
-      <span>p.{pageNumber}</span>
+      <span>{displayText}</span>
     </button>
   );
 }

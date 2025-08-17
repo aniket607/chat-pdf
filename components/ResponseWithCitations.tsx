@@ -15,49 +15,60 @@ export function ResponseWithCitations({ children }: ResponseWithCitationsProps) 
   // Extract citations and clean text for Response component
   const { cleanText, citations } = useMemo(() => {
     const pageNumbers = new Set<number>();
+    const citationInfo = new Map<number, { isRange: boolean; endPage?: number }>();
     
-    // Enhanced regex to match various citation formats:
-    // [p.3], [p.3-5], [p.3, p.4, p.5], [p.3,p.4,p.5]
-    const citationRegex = /\[p\.\d+(?:(?:\s*,\s*p\.\d+)*|(?:\s*-\s*\d+)?)\]/g;
+    // Standardized citation format: [p.N], [p.N-M], [p.N, M, O], [p.N, M-O, P]
+    const citationRegex = /\[p\.\s*[\d\s,\-]+\]/g;
     let match;
     
     // Find all citations and extract page numbers
     while ((match = citationRegex.exec(children)) !== null) {
-      const fullCitation = match[0]; // e.g., "[p.1, p.3, p.4, p.5]"
+      const fullCitation = match[0]; // e.g., "[p.15-42, 61-62]"
       
-      // Extract individual page numbers from the citation
-      const pageMatches = fullCitation.match(/p\.(\d+)/g);
-      if (pageMatches) {
-        for (const pageMatch of pageMatches) {
-          const pageNum = parseInt(pageMatch.replace('p.', ''));
+      // Extract the content inside brackets and remove "p." and any following spaces
+      const content = fullCitation.replace(/^\[p\.\s*/, '').replace(/\]$/, '');
+      
+      // Split by comma and process each part
+      const parts = content.split(',').map(part => part.trim());
+      
+      for (const part of parts) {
+        if (part.includes('-')) {
+          // Handle range like "15-42" - only add the start page
+          const [startStr, endStr] = part.split('-').map(s => s.trim());
+          const startPage = parseInt(startStr);
+          const endPage = parseInt(endStr);
+          
+          if (!isNaN(startPage) && !isNaN(endPage)) {
+            // Only add the start page for ranges, but store range info for display
+            pageNumbers.add(startPage);
+            citationInfo.set(startPage, { isRange: true, endPage });
+          }
+        } else {
+          // Handle single page like "61"
+          const pageNum = parseInt(part);
           if (!isNaN(pageNum)) {
             pageNumbers.add(pageNum);
-          }
-        }
-      }
-      
-      // Handle ranges like [p.3-5]
-      const rangeMatch = fullCitation.match(/p\.(\d+)\s*-\s*(\d+)/);
-      if (rangeMatch) {
-        const startPage = parseInt(rangeMatch[1]);
-        const endPage = parseInt(rangeMatch[2]);
-        
-        if (!isNaN(startPage) && !isNaN(endPage)) {
-          for (let page = startPage; page <= endPage; page++) {
-            pageNumbers.add(page);
+            citationInfo.set(pageNum, { isRange: false });
           }
         }
       }
     }
     
-    // Convert to sorted array of unique citations
+    // Convert to sorted array of unique citations with range info
     const uniqueCitations = Array.from(pageNumbers)
       .sort((a, b) => a - b)
-      .map(pageNumber => ({
-        pageNumber,
-        originalText: `[p.${pageNumber}]`,
-        index: 0 
-      }));
+      .map(pageNumber => {
+        const info = citationInfo.get(pageNumber);
+        return {
+          pageNumber,
+          originalText: info?.isRange && info.endPage 
+            ? `[p.${pageNumber}-${info.endPage}]` 
+            : `[p.${pageNumber}]`,
+          isRange: info?.isRange || false,
+          endPage: info?.endPage,
+          index: 0 
+        };
+      });
     
     // Remove citations from text for clean markdown rendering
     const cleanedText = children.replace(citationRegex, '');
@@ -84,6 +95,8 @@ export function ResponseWithCitations({ children }: ResponseWithCitationsProps) 
               key={`citation-${index}-${citation.pageNumber}`}
               pageNumber={citation.pageNumber}
               onClick={goToPage}
+              isRange={citation.isRange}
+              endPage={citation.endPage}
             />
           ))}
         </div>
