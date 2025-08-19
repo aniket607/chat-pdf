@@ -243,7 +243,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Enhanced upload progress overlay */}
+      {/* Upload progress overlay */}
       {uploadProgress && (
         <div className="fixed inset-0 z-50 bg-white/60 backdrop-blur-sm flex items-center justify-center">
           <div className="w-full max-w-xl px-6">

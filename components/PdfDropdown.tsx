@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { ChevronDown, FileText, X, Loader2 } from "lucide-react";
+import { ChevronDown, FileText, X, Loader2, Search } from "lucide-react";
 
 import type { PdfItem } from "@/types";
 
@@ -20,6 +20,9 @@ export function PdfDropdown({ currentPdfId, onSelectPdf, onDeletePdf, refreshTri
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -116,28 +119,121 @@ export function PdfDropdown({ currentPdfId, onSelectPdf, onDeletePdf, refreshTri
     return pdf.status;
   }
 
+  // Fuzzy subsequence highlighter: highlights characters in order of the query
+  function highlightMatch(text: string, query: string): React.ReactNode {
+    if (!query) return text;
+    let textIndex = 0;
+    let queryIndex = 0;
+    const parts: (string | React.JSX.Element)[] = [];
+    let buffer = "";
+
+    while (textIndex < text.length) {
+      const ch = text[textIndex];
+      if (
+        queryIndex < query.length &&
+        ch.toLowerCase() === query[queryIndex].toLowerCase()
+      ) {
+        if (buffer) {
+          parts.push(buffer);
+          buffer = "";
+        }
+        parts.push(<b key={textIndex}>{ch}</b>);
+        queryIndex++;
+      } else {
+        buffer += ch;
+      }
+      textIndex++;
+    }
+    if (buffer) parts.push(buffer);
+    return <>{parts}</>;
+  }
+
+  // Fuzzy subsequence matcher used for filtering
+  function isFuzzyMatch(text: string, query: string): boolean {
+    if (!query) return true;
+    let textIndex = 0;
+    let queryIndex = 0;
+    while (textIndex < text.length && queryIndex < query.length) {
+      if (text[textIndex].toLowerCase() === query[queryIndex].toLowerCase()) {
+        queryIndex++;
+      }
+      textIndex++;
+    }
+    return queryIndex === query.length;
+  }
+
+
   const currentPdf = pdfs.find(pdf => pdf.docId === currentPdfId);
+  // Compute filtered results based on search query; default to all when empty
+  const filteredPdfs = (searchQuery.trim()
+    ? pdfs.filter((pdf) => isFuzzyMatch(pdf.fileName, searchQuery))
+    : pdfs);
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Dropdown Trigger */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg border hover:bg-gray-100 transition-colors cursor-pointer"
-      >
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg border hover:bg-gray-100 transition-colors w-80">
         <FileText className="w-4 h-4 text-gray-600" />
-        <div className="text-sm text-left">
-          <span className="font-medium text-gray-700">
-            {currentPdf ? currentPdf.fileName : "No PDF selected"}
-          </span>
-          {currentPdf && (
-            <span className="text-gray-500 ml-1">
-              ({formatFileSize(currentPdf.fileSize)})
-            </span>
-          )}
-        </div>
-        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-      </button>
+        {isSearching ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              if (!isOpen) setIsOpen(true);
+            }}
+            onFocus={() => setIsOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setSearchQuery("");
+                setIsSearching(false);
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            placeholder={"Search documents…"}
+            className="flex-1 bg-transparent outline-none text-sm text-gray-700 placeholder:text-gray-400"
+          />
+        ) : (
+          <div className="flex-1 min-w-0" onClick={() => setIsOpen(!isOpen)}>
+            {(() => {
+              const display = currentPdf
+                ? `${currentPdf.fileName} (${formatFileSize(currentPdf.fileSize)})`
+                : "No PDF selected";
+              return (
+                <span
+                  className="block truncate whitespace-nowrap font-medium text-gray-700"
+                  title={display}
+                >
+                  {display}
+                </span>
+              );
+            })()}
+          </div>
+        )}
+        {/* Search toggle */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsSearching(true);
+            setIsOpen(true);
+            requestAnimationFrame(() => inputRef.current?.focus());
+          }}
+          className="p-1 rounded hover:bg-gray-100 cursor-pointer flex-none"
+          title="Search"
+        >
+          <Search className="w-4 h-4 text-gray-500" />
+        </button>
+        {/* Open/close dropdown */}
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="p-1 rounded hover:bg-gray-100 cursor-pointer flex-none"
+          title={isOpen ? "Hide" : "Show"}
+        >
+          <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+        </button>
+      </div>
 
       {/* Dropdown Menu */}
       {isOpen && (
@@ -153,47 +249,54 @@ export function PdfDropdown({ currentPdfId, onSelectPdf, onDeletePdf, refreshTri
             </div>
           ) : (
             <div className="py-1">
-              {pdfs.map((pdf) => (
-                <div
-                  key={pdf.docId}
-                  className={`px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 ${
-                    pdf.docId === currentPdfId ? "bg-blue-50" : ""
-                  }`}
-                  onClick={() => handleSelectPdf(pdf)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-gray-600 flex-shrink-0" />
-                        <span className="font-medium text-gray-900 truncate">
-                          {pdf.fileName}
-                        </span>
+              {filteredPdfs.length === 0 ? (
+                <div className="p-4 text-center text-gray-500">No results</div>
+              ) : (
+                filteredPdfs.map((pdf) => (
+                  <div
+                    key={pdf.docId}
+                    className={`px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                      pdf.docId === currentPdfId ? "bg-blue-50" : ""
+                    }`}
+                    onClick={() => {
+                      handleSelectPdf(pdf);
+                      setSearchQuery("");
+                      setIsSearching(false);
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-gray-600 flex-shrink-0" />
+                          <span className="font-medium text-gray-900 truncate">
+                            {highlightMatch(pdf.fileName, searchQuery)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                          <span>{formatFileSize(pdf.fileSize)}</span>
+                          <span>{formatDate(pdf.uploadedAt)}</span>
+                          <span className={getStatusColor(pdf.status)}>
+                            {getStatusText(pdf)}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                        <span>{formatFileSize(pdf.fileSize)}</span>
-                        <span>{formatDate(pdf.uploadedAt)}</span>
-                        <span className={getStatusColor(pdf.status)}>
-                          {getStatusText(pdf)}
-                        </span>
-                      </div>
+                      {/* Delete Button */}
+                      <button
+                        onClick={(e) => handleDeletePdf(pdf.docId, e)}
+                        disabled={deletingId === pdf.docId}
+                        className="p-1 hover:bg-red-100 rounded-full transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                        title="Delete PDF"
+                      >
+                        {deletingId === pdf.docId ? (
+                          <Loader2 className="w-3 h-3 animate-spin text-red-600" />
+                        ) : (
+                          <X className="w-3 h-3 text-red-600" />
+                        )}
+                      </button>
                     </div>
-                    
-                    {/* Delete Button */}
-                    <button
-                      onClick={(e) => handleDeletePdf(pdf.docId, e)}
-                      disabled={deletingId === pdf.docId}
-                      className="p-1 hover:bg-red-100 rounded-full transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
-                      title="Delete PDF"
-                    >
-                      {deletingId === pdf.docId ? (
-                        <Loader2 className="w-3 h-3 animate-spin text-red-600" />
-                      ) : (
-                        <X className="w-3 h-3 text-red-600" />
-                      )}
-                    </button>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           )}
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { X, Upload, FileText } from "lucide-react";
 
 interface UploadDialogProps {
@@ -14,6 +14,51 @@ export function UploadDialog({ isOpen, onClose, onUpload, isUploading = false }:
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Paste-to-select: allow users to press Cmd/Ctrl+V to paste a PDF file
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Try to find a PDF File from the clipboard data
+    function extractPdfFromClipboard(event: ClipboardEvent): File | null {
+      const clipboardData = event.clipboardData;
+      if (!clipboardData) return null;
+
+      // Prefer DataTransferItem list because it exposes types
+      const items = clipboardData.items;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind === "file") {
+          const file = item.getAsFile();
+          if (file && (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"))) {
+            return file;
+          }
+        }
+      }
+
+      // Fallback: iterate over files collection
+      const files = clipboardData.files;
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file && (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"))) {
+          return file;
+        }
+      }
+
+      return null;
+    }
+
+    function handlePaste(event: ClipboardEvent) {
+      const pdfFile = extractPdfFromClipboard(event);
+      if (pdfFile) {
+        event.preventDefault();
+        setSelectedFile(pdfFile);
+      }
+    }
+
+    document.addEventListener("paste", handlePaste);
+    return () => document.removeEventListener("paste", handlePaste);
+  }, [isOpen]);
 
   // Handle drag events for drag-and-drop functionality
   const handleDrag = (e: React.DragEvent) => {
