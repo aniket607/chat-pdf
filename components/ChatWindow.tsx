@@ -6,7 +6,7 @@ import {
 } from "@/components/ai-elements/conversation";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { PromptInput, PromptInputTextarea, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { ResponseWithCitations } from "@/components/ResponseWithCitations";
 
@@ -14,6 +14,32 @@ import { ResponseWithCitations } from "@/components/ResponseWithCitations";
 export default function ChatWindow({ docId }: { docId: string }) {
   const [input, setInput] = useState("");
   const { messages, status, sendMessage, error } = useChat();
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  useEffect(()=>{
+    let cancelled= false;
+
+    async function fetchSuggestions(){
+      if(!docId) return;
+      if(messages.length>0) return;
+      setLoadingSuggestions(true);
+      try{
+        const res= await fetch(`/api/doc/${docId}/suggestions`);
+        if(!res.ok) throw new Error("Failed to fetch suggestions");
+        const json=await res.json();
+        if(!cancelled) setSuggestions(Array.isArray(json.suggestions) ? json.suggestions : []);
+      }catch{
+        if(!cancelled) setSuggestions([]);
+      }finally{
+        if(!cancelled) setLoadingSuggestions(false);
+      }
+    }
+
+    fetchSuggestions();
+    return()=>{cancelled=true};
+  },[docId,messages.length]);
+
 
   const getErrorMessage = (error: Error): string => {
     const errorMsg = error.message.toLowerCase();
@@ -85,6 +111,17 @@ An unexpected error occurred while processing your question.
     }
   };
 
+  const handleSuggestionClick= (q:string)=>{
+    setInput(q);
+    sendMessage(
+      { text: q },
+      {
+        body: { docId },
+      },
+    );
+    setInput("");
+  }
+  
   return (
     <div className="w-full h-full min-h-0">
       <div className="flex h-full min-h-0 flex-col">
@@ -113,7 +150,27 @@ An unexpected error occurred while processing your question.
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
-
+        {messages.length===0 && (loadingSuggestions || suggestions.length>0) &&(
+          <div className="mt-2 w-full">
+            <div className="flex flex-wrap gap-2">
+              {loadingSuggestions && (
+                <span className="inline-flex items-center rounded-full border border-gray-200 bg-white/70 px-3 py-1.5 text-sm text-gray-600 shadow-sm">
+                  Generating Suggestions...
+                </span>
+              )}
+              {!loadingSuggestions &&
+                suggestions.slice(0,3).map((q,idx)=>(
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={()=>handleSuggestionClick(q)}
+                    className="group inline-flex max-w-full break-words text-left rounded-full border border-gray-200 bg-white/70 px-3 py-1.5 text-sm text-gray-800 shadow-sm transition-all duration-150 hover:border-gray-300 hover:bg-white hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer">
+                      {q}
+                  </button>
+                ))}
+            </div>
+          </div>
+        )}
         <PromptInput onSubmit={handleSubmit} className="mt-3 w-full relative shrink-0">
           <PromptInputTextarea
             value={input}
